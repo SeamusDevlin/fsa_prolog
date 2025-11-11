@@ -1,0 +1,13 @@
+# Prolog compiled files
+*.qlf
+
+# Backup files
+*~
+*.bak
+
+# Debug files
+debug_*.pl
+
+# OS files
+.DS_Store
+Thumbs.db
