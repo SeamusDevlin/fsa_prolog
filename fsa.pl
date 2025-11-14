@@ -4,12 +4,12 @@
 % a new state is added to the list and if isStart is true it will then replace the current start
 % same with the isAccept
 
-addState(fsa(States, Alphabet, Transitions, start_state, accept_states),
-         new_state, is_start, is_accept,
-         fsa(new_states, Alphabet, Transitions, new_start_state, new_accept_states)) :-
-    add_state_to_list(new_state, States, new_states),
-    update_start_state(is_start, new_state, start_state, new_start_state),
-    update_accept_states(is_accept, new_state, accept_states, new_accept_states).
+addState(fsa(States, Alphabet, Transitions, StartState, AcceptStates),
+         NewState, IsStart, IsAccept,
+         fsa(NewStates, Alphabet, Transitions, NewStartState, NewAcceptStates)) :-
+    add_state_to_list(NewState, States, NewStates),
+    update_start_state(IsStart, NewState, StartState, NewStartState),
+    update_accept_states(IsAccept, NewState, AcceptStates, NewAcceptStates).
 
 % helper predicate for adding state to list
 add_state_to_list(State, States, States) :- 
@@ -29,16 +29,16 @@ update_accept_states(_, _, AcceptStates, AcceptStates).
 % addTransition
 % adds a new transition to the FSA
 
-addTransition(fsa(States, Alphabet, Transitions, start_state, accept_states),
-              from_state, Symbol, to_state,
-              fsa(States, new_alphabet, new_transitions, start_state, accept_states)) :-
-              % checks if from_state and to_state exist
-              member(from_state, States),
-              member(to_state, States),
+addTransition(fsa(States, Alphabet, Transitions, StartState, AcceptStates),
+              FromState, Symbol, ToState,
+              fsa(States, NewAlphabet, NewTransitions, StartState, AcceptStates)) :-
+              % checks if FromState and ToState exist
+              member(FromState, States),
+              member(ToState, States),
               % adds transition to the transition list
-              new_transitions = [trans(from_state, Symbol, to_state) | Transitions],
+              NewTransitions = [trans(FromState, Symbol, ToState) | Transitions],
               % updates the alphabet if necessary
-              update_alphabet(Symbol, Alphabet, new_alphabet).
+              update_alphabet(Symbol, Alphabet, NewAlphabet).
 
 % helper predicate for updating alphabet
 update_alphabet(epsilon, Alphabet, Alphabet) :- !.
@@ -50,87 +50,84 @@ update_alphabet(Symbol, Alphabet, [Symbol|Alphabet]).
 % checks if the FSA accepts the given string
 
 accepts(FSA, String) :-
-    fsa(_, _, _, start_state, accept_states) = FSA,
+    fsa(_, _, _, StartState, AcceptStates) = FSA,
     % get initial states
-    epsilon_closure(FSA, [start_state], initial_states),
+    epsilon_closure(FSA, [StartState], InitialStates),
     % processes the input string 
-    process_string(FSA, initial_states, String, final_states),
+    process_string(FSA, InitialStates, String, FinalStates),
     % checks if any of the final states is an accept state
-    member(accept_state, accept_states),
-    member(accept_state, final_states).
+    member(AcceptState, AcceptStates),
+    member(AcceptState, FinalStates).
 
 % process input string symbol by symbol
-process_string(_, current_states, [], current_states).
+process_string(_, CurrentStates, [], CurrentStates).
 
-process_string(FSA, current_states, [Symbol | Rest], final_states) :-
+process_string(FSA, CurrentStates, [Symbol | Rest], FinalStates) :-
     Symbol \= epsilon,
     fsa(_, _, Transitions, _, _) = FSA,
     % this is so we can find all next states from current states on Symbol
-    collect_transitions(current_states, Symbol, Transitions, next_states_unclosed),
+    collect_transitions(CurrentStates, Symbol, Transitions, NextStatesUnclosed),
     % this will get all the epsilon closures of the states which were already reached
-    epsilon_closure_set(FSA, next_states_unclosed, next_states),
+    epsilon_closure_set(FSA, NextStatesUnclosed, NextStates),
     % will then continue processing rest of the symbols
-    process_string(FSA, next_states, Rest, final_states).
+    process_string(FSA, NextStates, Rest, FinalStates).
 
 % helper to collect all transition targets
 collect_transitions(FromStates, Symbol, Transitions, ToStates) :-
-    findall(to_state,
-        (   member(from_state, FromStates),
-            member(trans(from_state, Symbol, to_state), Transitions)
+    findall(ToState,
+        (   member(FromState, FromStates),
+            member(trans(FromState, Symbol, ToState), Transitions)
         ),
         ToStates).
 
 % essentially a wrapper for epsilon_closure_set for multiple states and handles starting states and then sends to epsilon_closure_set for actual processing
-epsilon_closure(FSA, state_list, closure_set) :-
-    epsilon_closure_set(FSA, state_list, closure_set).
+epsilon_closure(FSA, StateList, ClosureSet) :-
+    epsilon_closure_set(FSA, StateList, ClosureSet).
 
 % closure
 % returns the epsilon closure of a set of states reachable via epsilon transitions
 % using depth-first search
 
-closure(FSA, State, closure_set) :-
-    epsilon_closure_set(FSA, [State], closure_set).
+closure(FSA, State, ClosureSet) :-
+    epsilon_closure_set(FSA, [State], ClosureSet).
 
 % computation for epsilon-closure for a set of states
-epsilon_closure_set(FSA, state_set, closure_set) :-
-    epsilon_closure_helper(FSA, state_set, [], closure_set).
+epsilon_closure_set(FSA, StateSet, ClosureSet) :-
+    epsilon_closure_helper(FSA, StateSet, [], ClosureSet).
 
 % this is the actual computation for epsilon-closure using depth-first search with visited tracking
 epsilon_closure_helper(_, [], Visited, Visited).
 
-epsilon_closure_helper(FSA, [State|Rest], Visited, closure_set) :-
+epsilon_closure_helper(FSA, [State|Rest], Visited, ClosureSet) :-
     member(State, Visited),
     !,
-    epsilon_closure_helper(FSA, Rest, Visited, closure_set).
+    epsilon_closure_helper(FSA, Rest, Visited, ClosureSet).
 
-epsilon_closure_helper(FSA, [State|Rest], Visited, closure_set) :-
+epsilon_closure_helper(FSA, [State|Rest], Visited, ClosureSet) :-
     fsa(_, _, Transitions, _, _) = FSA,
-    % Find all states reachable via epsilon from State
-    findall(to_state,
-            member(trans(State, epsilon, to_state), Transitions),
-            epsilon_reachable),
-    % Add newly discovered states to the processing queue
-    append(epsilon_reachable, Rest, updated_rest),
-    % Continue with State added to visited set
-    epsilon_closure_helper(FSA, updated_rest, [State|Visited], closure_set).
+    findall(ToState,
+            member(trans(State, epsilon, ToState), Transitions),
+            EpsilonReachable),
+    append(EpsilonReachable, Rest, UpdatedRest),
+    epsilon_closure_helper(FSA, UpdatedRest, [State|Visited], ClosureSet).
 
 % next
 % returns the set of states reachable from a set of states on a given input symbol
 % symbol must not be epsilon
 
-next(FSA, State, Symbol, next_states) :-
+next(FSA, State, Symbol, NextStates) :-
     Symbol \= epsilon,
     fsa(_, _, Transitions, _, _) = FSA,
     % must get epsilon-closure of the starting state first
-    epsilon_closure_set(FSA, [State], closure_of_state),
+    epsilon_closure_set(FSA, [State], ClosureOfState),
     % then finds all states reachable via Symbol from any state in the closure
-    findall(to_state,
-            (   member(from_state, closure_of_state),
-                member(trans(from_state, Symbol, to_state), Transitions)
+    findall(ToState,
+            (   member(FromState, ClosureOfState),
+                member(trans(FromState, Symbol, ToState), Transitions)
             ),
-            direct_states),
+            DirectStates),
     % the result being the epsilon-closure of the directly reachable states
-    epsilon_closure_set(FSA, direct_states, next_states).
+    epsilon_closure_set(FSA, DirectStates, NextStates).
 
 % deterministic
 % checks if the FSA is deterministic meaning no state has two transitions for the same symbol
